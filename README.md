@@ -33,20 +33,17 @@ Asset Number | Sighted Date | Building Name | Room Number/Name | Person Responsi
 
 ## Deploy to GitHub Pages
 
-This project builds into `docs/` and is served straight from your `main` branch — no extra branch, no GitHub Actions.
+A GitHub Actions workflow at `.github/workflows/deploy.yml` builds and deploys on every push to `main`.
 
-```bash
-npm run build       # outputs to docs/
-git add docs
-git commit -m "build"
-git push
-```
+One-time setup:
 
-Then in your repo: **Settings → Pages → Source = Deploy from a branch → `main` / `/docs` → Save.**
+1. Push the repo.
+2. **Settings → Pages → Source = GitHub Actions.**
+3. Wait for the first run (Actions tab) to go green.
 
-A few minutes later your site is live at `https://<user>.github.io/<repo>/`.
+Site lives at `https://<user>.github.io/<repo>/`. Future pushes auto-deploy. `docs/` is gitignored — the Action builds it on CI.
 
-Re-deploying is the same three commands. `vite.config.ts` uses `base: "./"` so the same build works at any subpath, custom domain, or `file://`.
+`vite.config.ts` uses `base: "./"` so the same build works at any subpath, custom domain, or `file://`.
 
 ## Scanner notes
 
