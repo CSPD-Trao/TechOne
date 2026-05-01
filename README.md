@@ -33,15 +33,20 @@ Asset Number | Sighted Date | Building Name | Room Number/Name | Person Responsi
 
 ## Deploy to GitHub Pages
 
+This project builds into `docs/` and is served straight from your `main` branch — no extra branch, no GitHub Actions.
+
 ```bash
-npm install --save-dev gh-pages   # already in devDependencies
-npm run build
-npm run deploy
+npm run build       # outputs to docs/
+git add docs
+git commit -m "build"
+git push
 ```
 
-Then in repo Settings → Pages → set source to the `gh-pages` branch.
+Then in your repo: **Settings → Pages → Source = Deploy from a branch → `main` / `/docs` → Save.**
 
-`vite.config.ts` uses `base: "./"` so the same build works at any subpath (`username.github.io/stocktake/`, custom domain, file://, …).
+A few minutes later your site is live at `https://<user>.github.io/<repo>/`.
+
+Re-deploying is the same three commands. `vite.config.ts` uses `base: "./"` so the same build works at any subpath, custom domain, or `file://`.
 
 ## Scanner notes
 
