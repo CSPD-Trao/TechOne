@@ -164,31 +164,76 @@ function openCamera(onDetected) {
       <div class="row justify-between items-start mb-3">
         <div>
           <h2>Scan barcode</h2>
-          <p class="muted small mt-1">Point camera at a barcode</p>
+          <p class="muted small mt-1">Hold barcode steady in the box — keep scanning until done</p>
         </div>
-        <button class="btn btn-ghost btn-sm close-cam-btn">Close</button>
+        <button class="btn btn-primary btn-sm finish-cam-btn">Finish</button>
       </div>
       <div id="qr-preview" class="camera-preview-wrap"></div>
+      <div id="cam-scan-count" class="muted small mt-2" style="text-align:center">0 scanned this session</div>
     </div>`;
   document.body.appendChild(overlay);
 
   const scanner = new Html5Qrcode('qr-preview');
   let closing = false;
+  let scanCount = 0;
+  let lastCode = '';
+  let lastCodeTime = 0;
 
-  function stopAndClose(cb) {
+  function stopAndClose() {
     if (closing) return;
     closing = true;
-    scanner.stop().catch(() => {}).then(() => { overlay.remove(); cb?.(); });
+    scanner.stop().catch(() => {}).then(() => overlay.remove());
+  }
+
+  function onScan(decoded) {
+    const code = decoded.trim();
+    if (!code) return;
+    // debounce: ignore same code within 2 s to avoid re-triggering on the same label
+    const now = Date.now();
+    if (code === lastCode && now - lastCodeTime < 2000) return;
+    lastCode = code;
+    lastCodeTime = now;
+
+    const added = onDetected(code);
+    if (added) {
+      scanCount++;
+      const countEl = overlay.querySelector('#cam-scan-count');
+      if (countEl) countEl.textContent = `${scanCount} scanned this session`;
+    }
   }
 
   scanner.start(
     { facingMode: 'environment' },
     { fps: 15, qrbox: { width: 260, height: 160 } },
-    decoded => stopAndClose(() => onDetected(decoded.trim())),
+    onScan,
     () => {}
-  ).catch(() => { overlay.remove(); showSnack('Camera access denied', 'danger'); });
+  ).catch(err => {
+    overlay.remove();
+    const isDenied = String(err).toLowerCase().includes('permission') ||
+                     String(err).toLowerCase().includes('denied') ||
+                     String(err).toLowerCase().includes('notallowed');
+    if (isDenied) {
+      const msg = document.createElement('div');
+      msg.className = 'modal-overlay';
+      msg.innerHTML = `
+        <div class="modal">
+          <h2>Camera blocked</h2>
+          <p class="muted small mt-1">Chrome needs camera permission. Try:</p>
+          <ol style="margin:10px 0 0 1.1rem;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)">
+            <li>Tap the lock icon in Chrome's address bar and allow Camera</li>
+            <li>Or go to <strong style="color:var(--text)">Phone Settings → Apps → Chrome → Permissions → Camera</strong> and turn it on</li>
+          </ol>
+          <button class="btn btn-primary w-full mt-3 dismiss-cam-err">Got it</button>
+        </div>`;
+      document.body.appendChild(msg);
+      msg.querySelector('.dismiss-cam-err').onclick = () => msg.remove();
+      msg.onclick = e => { if (e.target === msg) msg.remove(); };
+    } else {
+      showSnack('Could not start camera', 'danger');
+    }
+  });
 
-  overlay.querySelector('.close-cam-btn').onclick = () => stopAndClose();
+  overlay.querySelector('.finish-cam-btn').onclick = stopAndClose;
   overlay.onclick = e => { if (e.target === overlay) stopAndClose(); };
 }
 
@@ -515,8 +560,9 @@ function renderScan(el) {
   const input = el.querySelector('#scanner-input');
   input.focus();
 
-  function processBarcode(code) {
-    if (!code) return;
+  // Returns true if a new device was added, false if duplicate was skipped.
+  function processBarcode(code, { silentDuplicate = false } = {}) {
+    if (!code) return false;
     input.value = '';
 
     const today = new Date().toDateString();
@@ -525,15 +571,12 @@ function renderScan(el) {
     );
 
     if (dup) {
+      if (silentDuplicate) return false;
       showDuplicateModal(
         code,
         dup,
+        () => showSnack(`Kept original scan of ${code}`),
         () => {
-          // delete duplicate (new scan discarded) — do nothing, original stays
-          showSnack(`Kept original scan of ${code}`);
-        },
-        () => {
-          // delete original, add new scan in its place
           sessionScans = sessionScans.filter(d => d.id !== dup.id);
           const device = addDevice(code);
           sessionScans.unshift(device);
@@ -542,13 +585,14 @@ function renderScan(el) {
           showSnack(`Replaced original scan of ${code}`);
         }
       );
-      return;
+      return false;
     }
 
     const device = addDevice(code);
     sessionScans.unshift(device);
     updateFeed();
     updateGrid();
+    return true;
   }
 
   function updateGrid() {
@@ -627,7 +671,7 @@ function renderScan(el) {
     if (val) processBarcode(val);
   };
   el.querySelector('.camera-btn').onclick = () => {
-    openCamera(code => processBarcode(code));
+    openCamera(code => processBarcode(code, { silentDuplicate: true }));
   };
   el.querySelector('.done-btn').onclick = () => { detach?.(); navigate('/list'); };
   el.querySelector('.back-btn').onclick = () => { detach?.(); navigate('/'); };
